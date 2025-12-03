@@ -245,14 +245,14 @@ def analyze_image_with_gemini(image_bytes: bytes) -> List[Dict]:
         genai.configure(api_key=api_key)
         
         # Versuche verschiedene Modellnamen (Fallback-Mechanismus)
-        # Reihenfolge: Neueste zuerst, dann Fallbacks
-        # Basierend auf verfügbaren Modellen: gemini-2.5-flash, gemini-2.5-pro, gemini-2.0-flash
+        # Reihenfolge: Optimiert für kostenlose Nutzung mit hohen Limits
+        # gemini-2.5-flash-lite hat 1000 RPD (statt 3 bei gemini-2.5-flash)
         model_names = [
-            'models/gemini-2.5-flash',      # Neuestes Flash-Modell (schnell)
-            'models/gemini-2.0-flash',       # Stabiles Flash-Modell
-            'models/gemini-2.5-pro',         # Neuestes Pro-Modell (höhere Qualität)
-            'models/gemini-2.0-flash-001',   # Alternative Flash-Version
-            'gemini-pro',                    # Fallback (falls models/ Präfix nicht nötig)
+            'models/gemini-2.5-flash-lite',  # BESTE OPTION: 1000 Requests/Tag, kostenlos!
+            'models/gemini-2.0-flash-lite',   # Alternative: 200 RPD, sehr hohe Token-Limits
+            'models/gemini-2.5-flash',        # Fallback: Nur 3 RPD in kostenloser Stufe
+            'models/gemini-2.0-flash',        # Fallback: 200 RPD
+            'models/gemini-2.5-pro',          # Fallback: Nur 50 RPD
         ]
         
         prompt = """Analysiere das Bild. Identifiziere alle Medienartikel (Bücher, Videospiele, DVDs, CDs, Blu-rays, etc.).
