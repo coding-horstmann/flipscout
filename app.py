@@ -90,7 +90,7 @@ def get_ebay_oauth_token() -> Optional[str]:
         return None
 
 
-def search_ebay_items(query: str, max_results: int = 20) -> Dict:
+def search_ebay_items(query: str, max_results: int = 50) -> Dict:
     """
     Sucht nach Artikeln auf eBay und sammelt umfassende Preisinformationen
     Gibt zurück: {
@@ -115,7 +115,8 @@ def search_ebay_items(query: str, max_results: int = 20) -> Dict:
         params = {
             "q": query,
             "limit": min(max_results, 200),  # Mehr Ergebnisse für bessere Statistik
-            "filter": "conditions:{USED|VERY_GOOD|GOOD|ACCEPTABLE}"
+            "filter": "conditions:{USED|VERY_GOOD|GOOD|ACCEPTABLE}",
+            "sort": "price"  # Sortiere nach Preis (aufsteigend)
         }
         
         response = requests.get(url, headers=headers, params=params, timeout=15)
@@ -192,14 +193,19 @@ def search_ebay_items(query: str, max_results: int = 20) -> Dict:
         stats = {}
         
         if current_items:
-            # Preise mit Versandkosten für Statistiken
-            current_prices_with_shipping = [item["price_with_shipping"] for item in current_items]
-            current_prices_with_shipping.sort()
+            # Sortiere Items nach Preis (inkl. Versand) für bessere Statistik
+            current_items_sorted = sorted(current_items, key=lambda x: x["price_with_shipping"])
             
-            stats['min_current_price'] = min(current_prices_with_shipping)
+            # Preise mit Versandkosten für Statistiken
+            current_prices_with_shipping = [item["price_with_shipping"] for item in current_items_sorted]
+            
+            stats['min_current_price'] = current_prices_with_shipping[0] if current_prices_with_shipping else None
             stats['median_current_price'] = statistics.median(current_prices_with_shipping) if current_prices_with_shipping else None
-            stats['max_current_price'] = max(current_prices_with_shipping)
+            stats['max_current_price'] = current_prices_with_shipping[-1] if current_prices_with_shipping else None
             stats['count_current'] = len(current_items)
+            
+            # Aktualisiere current_items mit sortierter Liste
+            current_items = current_items_sorted
         
         if sold_items:
             sold_prices = [item["price"] for item in sold_items]
@@ -422,8 +428,9 @@ if image_to_process:
                             result_data["Median Angebotspreis (inkl. Versand)"] = f"{stats['median_current_price']:.2f} €"
                         
                         # Link zum günstigsten Angebot (mit Versandkosten)
+                        # current_items ist bereits nach Preis sortiert, daher ist das erste Element das günstigste
                         if current_items:
-                            cheapest_item = min(current_items, key=lambda x: x['price_with_shipping'])
+                            cheapest_item = current_items[0]  # Erstes Element ist das günstigste (bereits sortiert)
                             result_data["Link"] = cheapest_item.get("itemWebUrl", "")
                         
                         results.append(result_data)
