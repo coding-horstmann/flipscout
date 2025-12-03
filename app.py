@@ -576,6 +576,167 @@ if image_to_process:
             
             if not detected_items:
                 st.warning("⚠️ Keine Artikel im Bild erkannt. Versuche es mit einem anderen Bild.")
+                
+                # Initialisiere Retry-Status für "nichts erkannt" Fall
+                if 'retry_status' not in st.session_state:
+                    st.session_state['retry_status'] = {}
+                
+                # Button für alternative Suche wenn nichts erkannt wurde
+                no_item_key = "retry_no_item"
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.write("**Keine Artikel erkannt** - Versuche alternative Suche")
+                    
+                    # Zeige Retry-Ergebnisse falls vorhanden
+                    if no_item_key in st.session_state.get('retry_status', {}):
+                        retry_info = st.session_state['retry_status'][no_item_key]
+                        if retry_info.get('success'):
+                            st.success(f"✅ **Erfolg mit:** {retry_info['query']}")
+                            retry_result = {
+                                "Artikel": retry_info['query'],
+                                "Günstigster Angebotspreis (inkl. Versand)": f"{retry_info['min_price']:.2f} €",
+                                "Median Angebotspreis (inkl. Versand)": f"{retry_info['median_price']:.2f} €",
+                                "Link": retry_info['link']
+                            }
+                            st.dataframe([retry_result], use_container_width=True, hide_index=True)
+                        elif retry_info.get('tried'):
+                            st.warning(f"⚠️ Keine Ergebnisse für die Alternativen gefunden.")
+                
+                with col2:
+                    # Button nur anzeigen wenn noch kein Erfolg
+                    if no_item_key not in st.session_state.get('retry_status', {}) or not st.session_state['retry_status'][no_item_key].get('success'):
+                        if st.button("🔄 Alternative suchen", key=f"btn_{no_item_key}"):
+                            # Setze Flag für Retry
+                            st.session_state['retry_status'][no_item_key] = {'processing': True}
+                            st.rerun()
+                
+                # Führe Retry aus wenn Flag gesetzt ist
+                if no_item_key in st.session_state.get('retry_status', {}) and st.session_state['retry_status'][no_item_key].get('processing'):
+                    st.session_state['retry_status'][no_item_key]['processing'] = False
+                    
+                    retry_image_bytes = st.session_state.get('current_image_bytes')
+                    if not retry_image_bytes:
+                        st.error("❌ Bild nicht mehr verfügbar. Bitte analysiere das Bild erneut.")
+                        st.session_state['retry_status'][no_item_key] = {'tried': True, 'success': False}
+                    else:
+                        st.info(f"🔄 **Starte alternative Suche...**")
+                        
+                        # Frage Gemini nach alternativen Suchbegriffen (ohne original_query, da nichts erkannt wurde)
+                        with st.spinner("🤖 Analysiere Bild für alternative Suchbegriffe..."):
+                            # Verwende einen generischen Prompt wenn nichts erkannt wurde
+                            try:
+                                api_key = st.secrets["GOOGLE_API_KEY"]
+                                genai.configure(api_key=api_key)
+                                
+                                model_names = [
+                                    'models/gemini-2.5-flash-lite',
+                                    'models/gemini-2.0-flash-lite',
+                                    'models/gemini-2.5-flash',
+                                ]
+                                
+                                retry_prompt = """Analysiere das Bild und gib mir 2-3 Suchbegriffe für eBay, die ich probieren könnte.
+
+Suche nach:
+- Büchern (Titel, Autor, ISBN)
+- Videospielen (Titel, Plattform)
+- DVDs/Blu-rays (Titel)
+- CDs (Künstler, Album)
+- Anderen Medienartikeln
+
+Gib mir NUR ein valides JSON Array zurück mit Suchbegriffen.
+
+Beispiel-Format:
+[
+  {"query_text": "Buchtitel Autor"},
+  {"query_text": "ISBN 9783123456789"},
+  {"query_text": "Spiel Titel Plattform"}
+]
+
+WICHTIG: 
+- Gib NUR das JSON Array zurück, keine zusätzlichen Erklärungen
+- Maximal 3 Suchbegriffe
+- Sei präzise und realistisch"""
+
+                                image_data = {
+                                    "mime_type": "image/jpeg",
+                                    "data": retry_image_bytes
+                                }
+                                
+                                alternative_queries = []
+                                for model_name in model_names:
+                                    try:
+                                        model = genai.GenerativeModel(model_name)
+                                        response = model.generate_content([retry_prompt, image_data])
+                                        
+                                        # Extrahiere JSON aus der Antwort
+                                        response_text = response.text.strip()
+                                        
+                                        # Entferne Markdown-Code-Blöcke falls vorhanden
+                                        if response_text.startswith("```json"):
+                                            response_text = response_text[7:]
+                                        if response_text.startswith("```"):
+                                            response_text = response_text[3:]
+                                        if response_text.endswith("```"):
+                                            response_text = response_text[:-3]
+                                        
+                                        response_text = response_text.strip()
+                                        
+                                        # Parse JSON
+                                        try:
+                                            alternatives = json.loads(response_text)
+                                            if isinstance(alternatives, list):
+                                                # Extrahiere query_text aus jedem Objekt
+                                                alternative_queries = [alt.get("query_text", "") for alt in alternatives if alt.get("query_text")]
+                                                break
+                                        except json.JSONDecodeError:
+                                            continue
+                                            
+                                    except Exception:
+                                        continue
+                                
+                                if alternative_queries:
+                                    st.success(f"✅ **Gefundene Alternativen:** {', '.join(alternative_queries[:3])}")
+                                    
+                                    # Probiere alternative Suchbegriffe
+                                    retry_success = False
+                                    for idx_alt, alt_query in enumerate(alternative_queries, 1):
+                                        if not alt_query:
+                                            continue
+                                        
+                                        st.markdown(f"### 🔍 Versuch {idx_alt}: {alt_query}")
+                                        
+                                        with st.spinner(f"Suche bei eBay nach '{alt_query}'..."):
+                                            ebay_data_retry = search_ebay_items(alt_query, max_results=50)
+                                        
+                                        stats_retry = ebay_data_retry.get('stats', {})
+                                        current_items_retry = ebay_data_retry.get('current_items', [])
+                                        
+                                        # Nur als Erfolg werten wenn tatsächlich Items gefunden wurden
+                                        if current_items_retry:
+                                            # Erfolg! Speichere in session_state
+                                            retry_success = True
+                                            st.session_state['retry_status'][no_item_key] = {
+                                                'success': True,
+                                                'query': alt_query,
+                                                'min_price': stats_retry.get('min_current_price', 0),
+                                                'median_price': stats_retry.get('median_current_price', 0),
+                                                'link': current_items_retry[0].get("itemWebUrl", "") if current_items_retry else ""
+                                            }
+                                            st.success(f"✅ **ERFOLG!** Gefunden mit: {alt_query}")
+                                            st.rerun()
+                                            break
+                                        else:
+                                            st.warning(f"❌ Keine Ergebnisse für: {alt_query}")
+                                    
+                                    if not retry_success:
+                                        st.session_state['retry_status'][no_item_key] = {'tried': True, 'success': False}
+                                        st.error("⚠️ **Keine der Alternativen hat Ergebnisse geliefert.**")
+                                else:
+                                    st.session_state['retry_status'][no_item_key] = {'tried': True, 'success': False}
+                                    st.warning("⚠️ Keine Alternativen gefunden.")
+                            except Exception as e:
+                                st.error(f"❌ Fehler bei alternativer Suche: {str(e)}")
+                                st.session_state['retry_status'][no_item_key] = {'tried': True, 'success': False}
             else:
                 st.success(f"✅ {len(detected_items)} Artikel erkannt!")
                 
@@ -598,7 +759,8 @@ if image_to_process:
                     stats = ebay_data.get('stats', {})
                     current_items = ebay_data.get('current_items', [])
                     
-                    if stats or current_items:
+                    # Nur als Erfolg werten wenn tatsächlich Items gefunden wurden
+                    if current_items:
                         # Bereite Ergebnis-Daten vor
                         result_data = {
                             "Artikel": query,
@@ -766,8 +928,10 @@ if image_to_process:
                                             stats_retry = ebay_data_retry.get('stats', {})
                                             current_items_retry = ebay_data_retry.get('current_items', [])
                                             
-                                            if stats_retry or current_items_retry:
+                                            # Nur als Erfolg werten wenn tatsächlich Items gefunden wurden
+                                            if current_items_retry:
                                                 # Erfolg! Speichere in session_state
+                                                retry_success = True
                                                 st.session_state['retry_status'][retry_key] = {
                                                     'success': True,
                                                     'query': alt_query,
