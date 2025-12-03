@@ -183,11 +183,13 @@ def analyze_image_with_gemini(image_bytes: bytes) -> List[Dict]:
         
         # Versuche verschiedene Modellnamen (Fallback-Mechanismus)
         # Reihenfolge: Neueste zuerst, dann Fallbacks
+        # Basierend auf verfügbaren Modellen: gemini-2.5-flash, gemini-2.5-pro, gemini-2.0-flash
         model_names = [
-            'gemini-pro',           # Stabilstes Modell
-            'gemini-1.5-pro',       # Neueres Modell
-            'models/gemini-pro',    # Mit models/ Präfix
-            'models/gemini-1.5-pro' # Mit models/ Präfix
+            'models/gemini-2.5-flash',      # Neuestes Flash-Modell (schnell)
+            'models/gemini-2.0-flash',       # Stabiles Flash-Modell
+            'models/gemini-2.5-pro',         # Neuestes Pro-Modell (höhere Qualität)
+            'models/gemini-2.0-flash-001',   # Alternative Flash-Version
+            'gemini-pro',                    # Fallback (falls models/ Präfix nicht nötig)
         ]
         
         prompt = """Analysiere das Bild. Identifiziere alle Medienartikel (Bücher, Videospiele, DVDs, CDs, Blu-rays, etc.).
