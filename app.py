@@ -333,30 +333,42 @@ def analyze_image_with_gemini(image_bytes: bytes) -> List[Dict]:
         
         prompt = """Analysiere das Bild SEHR sorgfältig. Identifiziere ALLE Medienartikel (Bücher, Videospiele, DVDs, CDs, Blu-rays, etc.).
 
+PRIORITÄT: Suche zuerst nach Barcodes und ISBNs!
+- Erkenne Barcodes (Strichcodes) auf Büchern, DVDs, etc.
+- Erkenne ISBN-Nummern (als Text, z.B. "ISBN 978-3-123-45678-9" oder "9783123456789")
+- Erkenne EAN-Codes (13-stellige Zahlen unter Barcodes)
+- Wenn Barcode/ISBN gefunden: Nutze diese für präzise Suche
+- Wenn kein Barcode/ISBN: Lies den Titel
+
 KRITISCH für Bücher von der Seite/Buchrücken:
 - Lies den Text auf dem Buchrücken ZEICHEN FÜR ZEICHEN genau
+- Suche nach ISBN-Nummern (oft am unteren Rand des Buchrückens)
 - Wenn der Text unscharf oder schwer lesbar ist, sei EXTREM vorsichtig
 - Verwechsle keine ähnlich aussehenden Buchstaben (z.B. "Miller's" nicht mit "Müller's")
 - Prüfe jeden erkannten Titel mehrmals bevor du ihn aufnimmst
 - Wenn du dir nicht sicher bist, gib den Text GENAU SO wieder wie er erscheint, auch wenn er unvollständig ist
-- Kombiniere ALLE sichtbaren Informationen: Titel, Autor, Verlag, Untertitel
+- Kombiniere ALLE sichtbaren Informationen: Titel, Autor, Verlag, Untertitel, ISBN
 - Bei Buchrücken: Lies von oben nach unten, achte auf Groß-/Kleinschreibung
 
 Für alle Artikel:
-- Nutze den vollständigen, EXAKTEN Titel wie er auf dem Buch steht
-- Füge Autor/Plattform hinzu für bessere eBay-Suche
+- Wenn ISBN/Barcode vorhanden: Nutze diese (z.B. "ISBN 9783123456789" oder "EAN 4001234567890")
+- Wenn kein Barcode: Nutze den vollständigen, EXAKTEN Titel wie er auf dem Artikel steht
+- Füge Autor/Plattform hinzu für bessere eBay-Suche (nur wenn kein Barcode)
 - Sei präzise: Nutze den genauen Titel (z.B. "Miller's Garden Antiques" nicht "Miller Garden Antique")
 
 QUALITÄTSKONTROLLE:
 - Prüfe jeden erkannten Titel auf Plausibilität
 - Wenn ein Titel seltsam aussieht oder du dir unsicher bist, gib ihn trotzdem an, aber so genau wie möglich
 - Bei Buchrücken: Lies den Text mehrmals und vergleiche
+- Bei Barcodes: Prüfe ob die Zahlen vollständig sind
 
 Gib mir NUR ein valides JSON Array zurück. Jedes Objekt muss das Feld 'query_text' enthalten.
 
-Beispiel-Format:
+Beispiel-Format (mit ISBN/Barcode bevorzugt):
 [
+  {"query_text": "ISBN 9783123456789"},
   {"query_text": "Harry Potter und der Stein der Weisen Buch"},
+  {"query_text": "EAN 4001234567890"},
   {"query_text": "PlayStation 5 FIFA 23"},
   {"query_text": "Matrix DVD"},
   {"query_text": "Miller's Garden Antiques Buch"}
@@ -364,6 +376,7 @@ Beispiel-Format:
 
 WICHTIG: 
 - Gib NUR das JSON Array zurück, keine zusätzlichen Erklärungen oder Markdown
+- PRIORISIERE Barcodes/ISBNs über Titel-Erkennung
 - Bei Buchrücken: Lies den Text EXTREM sorgfältig, Zeichen für Zeichen
 - Wenn unsicher: Gib den Text trotzdem an, aber so genau wie möglich"""
 
