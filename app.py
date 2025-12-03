@@ -6,6 +6,7 @@ import base64
 from typing import List, Dict, Optional
 import statistics
 from io import BytesIO
+from datetime import datetime
 
 # Seite konfigurieren
 st.set_page_config(
@@ -383,5 +384,6 @@ else:
 
 # Footer
 st.markdown("---")
-st.markdown("**Flipscout** - Retail Arbitrage Scanner | Made with Streamlit")
+current_time = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
+st.markdown(f"**Flipscout** - Retail Arbitrage Scanner | Made with Streamlit | Version: {current_time}")
 
