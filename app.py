@@ -112,14 +112,26 @@ def search_ebay_items(query: str, max_results: int = 50) -> Dict:
             "X-EBAY-C-MARKETPLACE-ID": "EBAY_DE"
         }
         
+        # Versuche zuerst mit Filter
         params = {
             "q": query,
-            "limit": min(max_results, 200),  # Mehr Ergebnisse für bessere Statistik
+            "limit": min(max_results, 200),
             "filter": "conditions:{USED|VERY_GOOD|GOOD|ACCEPTABLE}"
         }
         
-        # Versuche zuerst ohne Sortierung (falls Sortierung nicht unterstützt wird)
         response = requests.get(url, headers=headers, params=params, timeout=15)
+        
+        # Falls keine Ergebnisse, versuche ohne Filter
+        if response.status_code == 200:
+            data = response.json()
+            items = data.get("itemSummaries", [])
+            if not items:
+                # Versuche ohne Filter
+                params_no_filter = {
+                    "q": query,
+                    "limit": min(max_results, 200)
+                }
+                response = requests.get(url, headers=headers, params=params_no_filter, timeout=15)
         
         current_items = []
         if response.status_code == 200:
