@@ -665,31 +665,31 @@ if image_to_process:
                         # Erfolgsmeldungen für profitable Artikel
                         st.header("💰 Profit-Analyse")
                         for r in results_with_data:
-                        median_offer = r.get("Median Angebotspreis (inkl. Versand)", "N/A")
-                        min_offer = r.get("Günstigster Angebotspreis (inkl. Versand)", "N/A")
-                        
-                        # Profit-Bewertung basierend auf Median Angebotspreis (inkl. Versand)
-                        if r["Preis"] > 20:
-                            st.success(
-                                f"✅ **{r['Artikel']}** | "
-                                f"Günstigster: {min_offer} | "
-                                f"Median: {median_offer} | "
-                                f"Potentieller Profit: {r['Preis']:.2f}€+ 💚"
-                            )
-                        elif r["Preis"] > 10:
-                            st.info(
-                                f"ℹ️ **{r['Artikel']}** | "
-                                f"Günstigster: {min_offer} | "
-                                f"Median: {median_offer} | "
-                                f"Möglicher Profit: {r['Preis']:.2f}€"
-                            )
-                        else:
-                            st.warning(
-                                f"⚠️ **{r['Artikel']}** | "
-                                f"Günstigster: {min_offer} | "
-                                f"Median: {median_offer} | "
-                                f"Niedrige Margen"
-                            )
+                            median_offer = r.get("Median Angebotspreis (inkl. Versand)", "N/A")
+                            min_offer = r.get("Günstigster Angebotspreis (inkl. Versand)", "N/A")
+                            
+                            # Profit-Bewertung basierend auf Median Angebotspreis (inkl. Versand)
+                            if r["Preis"] > 20:
+                                st.success(
+                                    f"✅ **{r['Artikel']}** | "
+                                    f"Günstigster: {min_offer} | "
+                                    f"Median: {median_offer} | "
+                                    f"Potentieller Profit: {r['Preis']:.2f}€+ 💚"
+                                )
+                            elif r["Preis"] > 10:
+                                st.info(
+                                    f"ℹ️ **{r['Artikel']}** | "
+                                    f"Günstigster: {min_offer} | "
+                                    f"Median: {median_offer} | "
+                                    f"Möglicher Profit: {r['Preis']:.2f}€"
+                                )
+                            else:
+                                st.warning(
+                                    f"⚠️ **{r['Artikel']}** | "
+                                    f"Günstigster: {min_offer} | "
+                                    f"Median: {median_offer} | "
+                                    f"Niedrige Margen"
+                                )
                     
                     # Manuelle Retry-Option für Artikel ohne Ergebnisse
                     if results_no_data:
