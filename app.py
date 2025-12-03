@@ -576,115 +576,6 @@ if image_to_process:
             
             if not detected_items:
                 st.warning("⚠️ Keine Artikel im Bild erkannt. Versuche es mit einem anderen Bild.")
-                
-                # Alternative Suche Button
-                if st.button("🔄 Alternative suchen", key="btn_no_item", type="secondary"):
-                    st.markdown("---")
-                    st.info("🔄 **Alternative Suche wird gestartet...**")
-                    
-                    # Frage Gemini nach einem alternativen/einfacheren Titel
-                    with st.spinner("🤖 Gemini generiert alternativen Titel..."):
-                        try:
-                            api_key = st.secrets["GOOGLE_API_KEY"]
-                            genai.configure(api_key=api_key)
-                            
-                            model_names = [
-                                'models/gemini-2.5-flash-lite',
-                                'models/gemini-2.0-flash-lite',
-                                'models/gemini-2.5-flash',
-                            ]
-                            
-                            retry_prompt = """Ich habe nach einem Artikel auf eBay gesucht, aber keine Ergebnisse gefunden.
-
-Analysiere das Bild nochmal und gib mir einen alternativen, vielleicht einfacheren Suchbegriff für eBay.
-
-WICHTIG:
-- Verwende einen kürzeren, einfacheren Titel
-- Entferne unnötige Details
-- Fokussiere dich auf den Haupttitel
-- Bei Büchern: Nutze nur Titel oder ISBN falls sichtbar
-
-Gib mir NUR ein valides JSON Array zurück mit einem alternativen Suchbegriff.
-
-Beispiel-Format:
-[
-  {"query_text": "Einfacherer Titel"}
-]
-
-WICHTIG: 
-- Gib NUR das JSON Array zurück, keine zusätzlichen Erklärungen
-- Nur EIN alternativer Suchbegriff"""
-
-                            image_data = {
-                                "mime_type": "image/jpeg",
-                                "data": image_bytes
-                            }
-                            
-                            alternative_query = None
-                            for model_name in model_names:
-                                try:
-                                    model = genai.GenerativeModel(model_name)
-                                    response = model.generate_content([retry_prompt, image_data])
-                                    
-                                    # Extrahiere JSON aus der Antwort
-                                    response_text = response.text.strip()
-                                    
-                                    # Entferne Markdown-Code-Blöcke falls vorhanden
-                                    if response_text.startswith("```json"):
-                                        response_text = response_text[7:]
-                                    if response_text.startswith("```"):
-                                        response_text = response_text[3:]
-                                    if response_text.endswith("```"):
-                                        response_text = response_text[:-3]
-                                    
-                                    response_text = response_text.strip()
-                                    
-                                    # Parse JSON
-                                    try:
-                                        alternatives = json.loads(response_text)
-                                        if isinstance(alternatives, list) and len(alternatives) > 0:
-                                            alternative_query = alternatives[0].get("query_text", "")
-                                            if alternative_query:
-                                                break
-                                    except json.JSONDecodeError:
-                                        continue
-                                        
-                                except Exception:
-                                    continue
-                            
-                            if alternative_query:
-                                st.success(f"✅ **Alternativer Titel generiert:** {alternative_query}")
-                                st.markdown("---")
-                                
-                                # Suche bei eBay mit alternativem Titel
-                                st.markdown(f"### 🔍 Versuch mit alternativem Titel: **{alternative_query}**")
-                                
-                                with st.spinner(f"Suche bei eBay nach '{alternative_query}'..."):
-                                    ebay_data_retry = search_ebay_items(alternative_query, max_results=50)
-                                
-                                stats_retry = ebay_data_retry.get('stats', {})
-                                current_items_retry = ebay_data_retry.get('current_items', [])
-                                
-                                # Prüfe ob Ergebnisse gefunden wurden
-                                if current_items_retry:
-                                    st.success("✅ **ERFOLG! Ergebnisse gefunden!**")
-                                    
-                                    # Zeige Ergebnisse
-                                    result_data = {
-                                        "Artikel": alternative_query,
-                                        "Günstigster Angebotspreis (inkl. Versand)": f"{stats_retry.get('min_current_price', 0):.2f} €",
-                                        "Median Angebotspreis (inkl. Versand)": f"{stats_retry.get('median_current_price', 0):.2f} €",
-                                        "Link": current_items_retry[0].get("itemWebUrl", "") if current_items_retry else ""
-                                    }
-                                    
-                                    st.dataframe([result_data], use_container_width=True, hide_index=True)
-                                else:
-                                    st.error("⚠️ **Auch mit alternativem Titel wurden keine Ergebnisse gefunden.**")
-                            else:
-                                st.warning("⚠️ Konnte keinen alternativen Titel generieren.")
-                                
-                        except Exception as e:
-                            st.error(f"❌ Fehler bei alternativer Suche: {str(e)}")
             else:
                 st.success(f"✅ {len(detected_items)} Artikel erkannt!")
                 
@@ -808,28 +699,86 @@ WICHTIG:
                     if results_no_data:
                         st.header("⚠️ Keine Ergebnisse gefunden")
                         
+                        # Initialisiere session_state für alternative Titel
+                        if 'alternative_titles' not in st.session_state:
+                            st.session_state['alternative_titles'] = {}
+                        
                         for r_idx, r in enumerate(results_no_data):
                             with st.container():
                                 st.write(f"**{r['original_query']}** - Keine eBay-Ergebnisse gefunden")
                                 
-                                # Alternative Suche Button
-                                if st.button("🔄 Alternative suchen", key=f"btn_retry_{r_idx}", type="secondary"):
-                                    st.markdown("---")
-                                    st.info(f"🔄 **Alternative Suche wird gestartet für:** {r['original_query']}")
+                                retry_key = f"retry_{r_idx}"
+                                
+                                # Prüfe ob bereits ein alternativer Titel generiert wurde
+                                alternative_title = st.session_state['alternative_titles'].get(retry_key)
+                                
+                                if alternative_title:
+                                    # Zeige alternativen Titel an
+                                    st.info(f"💡 **Alternativer Titel:** {alternative_title}")
                                     
-                                    # Frage Gemini nach einem alternativen/einfacheren Titel
-                                    with st.spinner("🤖 Gemini generiert alternativen Titel..."):
-                                        try:
-                                            api_key = st.secrets["GOOGLE_API_KEY"]
-                                            genai.configure(api_key=api_key)
+                                    # Button für eBay-Suche mit alternativem Titel
+                                    col1, col2 = st.columns([1, 1])
+                                    with col1:
+                                        if st.button("🔍 eBay fragen", key=f"btn_ebay_{r_idx}", type="primary"):
+                                            st.markdown("---")
+                                            st.markdown(f"### 🔍 Suche bei eBay mit: **{alternative_title}**")
                                             
-                                            model_names = [
-                                                'models/gemini-2.5-flash-lite',
-                                                'models/gemini-2.0-flash-lite',
-                                                'models/gemini-2.5-flash',
-                                            ]
+                                            with st.spinner(f"Suche bei eBay nach '{alternative_title}'..."):
+                                                ebay_data_retry = search_ebay_items(alternative_title, max_results=50)
                                             
-                                            retry_prompt = f"""Ich habe nach "{r['original_query']}" auf eBay gesucht, aber keine Ergebnisse gefunden.
+                                            stats_retry = ebay_data_retry.get('stats', {})
+                                            current_items_retry = ebay_data_retry.get('current_items', [])
+                                            
+                                            # Prüfe ob Ergebnisse gefunden wurden
+                                            if current_items_retry:
+                                                st.success("✅ **ERFOLG! Ergebnisse gefunden!**")
+                                                
+                                                # Zeige Ergebnisse in Tabelle
+                                                result_data = {
+                                                    "Artikel": alternative_title,
+                                                    "Günstigster Angebotspreis (inkl. Versand)": f"{stats_retry.get('min_current_price', 0):.2f} €",
+                                                    "Median Angebotspreis (inkl. Versand)": f"{stats_retry.get('median_current_price', 0):.2f} €",
+                                                    "Link": current_items_retry[0].get("itemWebUrl", "") if current_items_retry else ""
+                                                }
+                                                
+                                                st.dataframe([result_data], use_container_width=True, hide_index=True)
+                                                
+                                                # Zeige auch Profit-Analyse
+                                                min_price = stats_retry.get('min_current_price', 0)
+                                                median_price = stats_retry.get('median_current_price', 0)
+                                                
+                                                if min_price > 20:
+                                                    st.success(f"✅ **{alternative_title}** | Günstigster: {min_price:.2f} € | Median: {median_price:.2f} € | Potentieller Profit: {min_price:.2f}€+ 💚")
+                                                elif min_price > 10:
+                                                    st.info(f"ℹ️ **{alternative_title}** | Günstigster: {min_price:.2f} € | Median: {median_price:.2f} € | Möglicher Profit: {min_price:.2f}€")
+                                                else:
+                                                    st.warning(f"⚠️ **{alternative_title}** | Günstigster: {min_price:.2f} € | Median: {median_price:.2f} € | Niedrige Margen")
+                                            else:
+                                                st.error("⚠️ **Auch mit alternativem Titel wurden keine Ergebnisse gefunden.**")
+                                    
+                                    with col2:
+                                        if st.button("🔄 Neuen Titel generieren", key=f"btn_new_title_{r_idx}", type="secondary"):
+                                            # Lösche alten Titel und generiere neuen
+                                            del st.session_state['alternative_titles'][retry_key]
+                                            st.rerun()
+                                else:
+                                    # Button für Gemini-Anfrage
+                                    if st.button("🤖 Gemini nach alternativem Titel fragen", key=f"btn_gemini_{r_idx}", type="secondary"):
+                                        st.markdown("---")
+                                        
+                                        # Frage Gemini nach einem alternativen Titel
+                                        with st.spinner("🤖 Gemini generiert alternativen Titel..."):
+                                            try:
+                                                api_key = st.secrets["GOOGLE_API_KEY"]
+                                                genai.configure(api_key=api_key)
+                                                
+                                                model_names = [
+                                                    'models/gemini-2.5-flash-lite',
+                                                    'models/gemini-2.0-flash-lite',
+                                                    'models/gemini-2.5-flash',
+                                                ]
+                                                
+                                                retry_prompt = f"""Ich habe nach "{r['original_query']}" auf eBay gesucht, aber keine Ergebnisse gefunden.
 
 Analysiere das Bild nochmal und gib mir einen alternativen, vielleicht einfacheren Suchbegriff für eBay.
 
@@ -850,87 +799,54 @@ WICHTIG:
 - Gib NUR das JSON Array zurück, keine zusätzlichen Erklärungen
 - Nur EIN alternativer Suchbegriff"""
 
-                                            image_data = {
-                                                "mime_type": "image/jpeg",
-                                                "data": st.session_state.get('current_image_bytes')
-                                            }
-                                            
-                                            alternative_query = None
-                                            for model_name in model_names:
-                                                try:
-                                                    model = genai.GenerativeModel(model_name)
-                                                    response = model.generate_content([retry_prompt, image_data])
-                                                    
-                                                    # Extrahiere JSON aus der Antwort
-                                                    response_text = response.text.strip()
-                                                    
-                                                    # Entferne Markdown-Code-Blöcke falls vorhanden
-                                                    if response_text.startswith("```json"):
-                                                        response_text = response_text[7:]
-                                                    if response_text.startswith("```"):
-                                                        response_text = response_text[3:]
-                                                    if response_text.endswith("```"):
-                                                        response_text = response_text[:-3]
-                                                    
-                                                    response_text = response_text.strip()
-                                                    
-                                                    # Parse JSON
+                                                image_data = {
+                                                    "mime_type": "image/jpeg",
+                                                    "data": st.session_state.get('current_image_bytes')
+                                                }
+                                                
+                                                alternative_query = None
+                                                for model_name in model_names:
                                                     try:
-                                                        alternatives = json.loads(response_text)
-                                                        if isinstance(alternatives, list) and len(alternatives) > 0:
-                                                            alternative_query = alternatives[0].get("query_text", "")
-                                                            if alternative_query:
-                                                                break
-                                                    except json.JSONDecodeError:
-                                                        continue
+                                                        model = genai.GenerativeModel(model_name)
+                                                        response = model.generate_content([retry_prompt, image_data])
                                                         
-                                                except Exception:
-                                                    continue
-                                            
-                                            if alternative_query:
-                                                st.success(f"✅ **Alternativer Titel generiert:** {alternative_query}")
-                                                st.markdown("---")
+                                                        # Extrahiere JSON aus der Antwort
+                                                        response_text = response.text.strip()
+                                                        
+                                                        # Entferne Markdown-Code-Blöcke falls vorhanden
+                                                        if response_text.startswith("```json"):
+                                                            response_text = response_text[7:]
+                                                        if response_text.startswith("```"):
+                                                            response_text = response_text[3:]
+                                                        if response_text.endswith("```"):
+                                                            response_text = response_text[:-3]
+                                                        
+                                                        response_text = response_text.strip()
+                                                        
+                                                        # Parse JSON
+                                                        try:
+                                                            alternatives = json.loads(response_text)
+                                                            if isinstance(alternatives, list) and len(alternatives) > 0:
+                                                                alternative_query = alternatives[0].get("query_text", "")
+                                                                if alternative_query:
+                                                                    # Speichere alternativen Titel im session_state
+                                                                    st.session_state['alternative_titles'][retry_key] = alternative_query
+                                                                    break
+                                                        except json.JSONDecodeError:
+                                                            continue
+                                                            
+                                                    except Exception:
+                                                        continue
                                                 
-                                                # Suche bei eBay mit alternativem Titel
-                                                st.markdown(f"### 🔍 Versuch mit alternativem Titel: **{alternative_query}**")
-                                                
-                                                with st.spinner(f"Suche bei eBay nach '{alternative_query}'..."):
-                                                    ebay_data_retry = search_ebay_items(alternative_query, max_results=50)
-                                                
-                                                stats_retry = ebay_data_retry.get('stats', {})
-                                                current_items_retry = ebay_data_retry.get('current_items', [])
-                                                
-                                                # Prüfe ob Ergebnisse gefunden wurden
-                                                if current_items_retry:
-                                                    st.success("✅ **ERFOLG! Ergebnisse gefunden!**")
-                                                    
-                                                    # Zeige Ergebnisse in Tabelle
-                                                    result_data = {
-                                                        "Artikel": alternative_query,
-                                                        "Günstigster Angebotspreis (inkl. Versand)": f"{stats_retry.get('min_current_price', 0):.2f} €",
-                                                        "Median Angebotspreis (inkl. Versand)": f"{stats_retry.get('median_current_price', 0):.2f} €",
-                                                        "Link": current_items_retry[0].get("itemWebUrl", "") if current_items_retry else ""
-                                                    }
-                                                    
-                                                    st.dataframe([result_data], use_container_width=True, hide_index=True)
-                                                    
-                                                    # Zeige auch Profit-Analyse
-                                                    min_price = stats_retry.get('min_current_price', 0)
-                                                    median_price = stats_retry.get('median_current_price', 0)
-                                                    
-                                                    if min_price > 20:
-                                                        st.success(f"✅ **{alternative_query}** | Günstigster: {min_price:.2f} € | Median: {median_price:.2f} € | Potentieller Profit: {min_price:.2f}€+ 💚")
-                                                    elif min_price > 10:
-                                                        st.info(f"ℹ️ **{alternative_query}** | Günstigster: {min_price:.2f} € | Median: {median_price:.2f} € | Möglicher Profit: {min_price:.2f}€")
-                                                    else:
-                                                        st.warning(f"⚠️ **{alternative_query}** | Günstigster: {min_price:.2f} € | Median: {median_price:.2f} € | Niedrige Margen")
+                                                if alternative_query:
+                                                    st.success(f"✅ **Alternativer Titel generiert:** {alternative_query}")
+                                                    st.info("💡 Klicke auf 'eBay fragen' um mit diesem Titel zu suchen.")
+                                                    st.rerun()
                                                 else:
-                                                    st.error("⚠️ **Auch mit alternativem Titel wurden keine Ergebnisse gefunden.**")
-                                            else:
-                                                st.warning("⚠️ Konnte keinen alternativen Titel generieren.")
-                                                
-                                        except Exception as e:
-                                            st.error(f"❌ Fehler bei alternativer Suche: {str(e)}")
+                                                    st.warning("⚠️ Konnte keinen alternativen Titel generieren.")
+                                                    
+                                            except Exception as e:
+                                                st.error(f"❌ Fehler bei Gemini-Anfrage: {str(e)}")
                                 
                                 st.markdown("---")
                 else:
