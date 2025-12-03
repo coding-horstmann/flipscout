@@ -403,8 +403,8 @@ if image_to_process:
                     
                     status_text.text(f"🔍 Suche nach: {query} ({idx + 1}/{len(detected_items)})")
                     
-                    # eBay-Suche mit erweiterten Daten
-                    ebay_data = search_ebay_items(query, max_results=20)
+                    # eBay-Suche mit erweiterten Daten (50 Ergebnisse für bessere Statistik)
+                    ebay_data = search_ebay_items(query, max_results=50)
                     
                     stats = ebay_data.get('stats', {})
                     current_items = ebay_data.get('current_items', [])
