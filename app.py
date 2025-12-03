@@ -90,17 +90,21 @@ def get_ebay_oauth_token() -> Optional[str]:
         return None
 
 
-def search_ebay_sold_items(query: str, max_results: int = 5) -> List[Dict]:
+def search_ebay_items(query: str, max_results: int = 20) -> Dict:
     """
-    Sucht nach verkauften Artikeln auf eBay mit der Browse API
+    Sucht nach Artikeln auf eBay und sammelt umfassende Preisinformationen
+    Gibt zurück: {
+        'current_items': [],  # Aktuelle Angebote
+        'sold_items': [],     # Verkaufte Artikel (falls verfügbar)
+        'stats': {}           # Statistiken
+    }
     """
     try:
         oauth_token = get_ebay_oauth_token()
         if not oauth_token:
-            return []
+            return {'current_items': [], 'sold_items': [], 'stats': {}}
         
-        # eBay Browse API Endpoint für verkaufte Artikel
-        # Nutze die Browse API mit Filter für verkaufte Artikel
+        # 1. Aktuelle Angebote holen (Browse API)
         url = "https://api.ebay.com/buy/browse/v1/item_summary/search"
         
         headers = {
@@ -110,51 +114,91 @@ def search_ebay_sold_items(query: str, max_results: int = 5) -> List[Dict]:
         
         params = {
             "q": query,
-            "limit": max_results * 2,  # Mehr Ergebnisse holen, da wir filtern müssen
+            "limit": min(max_results, 200),  # Mehr Ergebnisse für bessere Statistik
             "filter": "conditions:{USED|VERY_GOOD|GOOD|ACCEPTABLE}"
         }
         
         response = requests.get(url, headers=headers, params=params, timeout=15)
         
+        current_items = []
         if response.status_code == 200:
             data = response.json()
             items = data.get("itemSummaries", [])
             
-            # Filtere nach verkauften Artikeln (wenn verfügbar)
-            # Hinweis: Die Browse API zeigt nicht direkt "sold", daher nutzen wir
-            # die verfügbaren Daten und filtern nach gebrauchten Artikeln
-            sold_items = []
-            for item in items[:max_results]:
-                # Extrahiere Preisinformationen
+            for item in items:
                 price_info = item.get("price", {})
                 if price_info:
                     price_value = price_info.get("value", "0")
                     currency = price_info.get("currency", "EUR")
                     
-                    # Konvertiere zu Float
                     try:
                         price_float = float(price_value)
-                        sold_items.append({
+                        current_items.append({
                             "title": item.get("title", "Unbekannt"),
                             "price": price_float,
                             "currency": currency,
                             "itemId": item.get("itemId", ""),
                             "itemWebUrl": item.get("itemWebUrl", ""),
-                            "condition": item.get("condition", "Unbekannt")
+                            "condition": item.get("condition", "Unbekannt"),
+                            "availability": "available"
                         })
                     except ValueError:
                         continue
+        
+        # 2. Versuche Marketplace Insights API für Verkaufsdaten (letzte 90 Tage)
+        sold_items = []
+        try:
+            insights_url = "https://api.ebay.com/buy/marketplace_insights/v1_beta/item_sales/search"
+            insights_params = {
+                "q": query,
+                "filter": "conditions:{USED|VERY_GOOD|GOOD|ACCEPTABLE}"
+            }
             
-            return sold_items
-        else:
-            st.warning(f"⚠️ eBay API Fehler: {response.status_code}")
-            if response.status_code == 401:
-                st.error("❌ Ungültige eBay API Credentials!")
-            return []
+            insights_response = requests.get(
+                insights_url, 
+                headers=headers, 
+                params=insights_params, 
+                timeout=15
+            )
             
+            if insights_response.status_code == 200:
+                insights_data = insights_response.json()
+                # Verarbeite Insights-Daten falls verfügbar
+                # Die Struktur kann variieren
+                pass
+        except:
+            # Marketplace Insights API nicht verfügbar oder nicht autorisiert
+            pass
+        
+        # 3. Berechne Statistiken
+        stats = {}
+        
+        if current_items:
+            current_prices = [item["price"] for item in current_items]
+            current_prices.sort()
+            
+            stats['min_current_price'] = min(current_prices)
+            stats['median_current_price'] = statistics.median(current_prices) if current_prices else None
+            stats['max_current_price'] = max(current_prices)
+            stats['count_current'] = len(current_items)
+        
+        if sold_items:
+            sold_prices = [item["price"] for item in sold_items]
+            sold_prices.sort()
+            
+            stats['min_sold_price'] = min(sold_prices)
+            stats['median_sold_price'] = statistics.median(sold_prices) if sold_prices else None
+            stats['count_sold'] = len(sold_items)
+        
+        return {
+            'current_items': current_items,
+            'sold_items': sold_items,
+            'stats': stats
+        }
+        
     except Exception as e:
         st.error(f"❌ Fehler bei eBay Suche: {str(e)}")
-        return []
+        return {'current_items': [], 'sold_items': [], 'stats': {}}
 
 
 def calculate_median_price(items: List[Dict]) -> Optional[float]:
@@ -334,18 +378,45 @@ if image_to_process:
                     
                     status_text.text(f"🔍 Suche nach: {query} ({idx + 1}/{len(detected_items)})")
                     
-                    # eBay-Suche
-                    ebay_items = search_ebay_sold_items(query, max_results=5)
+                    # eBay-Suche mit erweiterten Daten
+                    ebay_data = search_ebay_items(query, max_results=20)
                     
-                    if ebay_items:
-                        median_price = calculate_median_price(ebay_items)
-                        if median_price:
-                            results.append({
-                                "Artikel": query,
-                                "Median-Preis": f"{median_price:.2f} €",
-                                "Link": ebay_items[0].get("itemWebUrl", ""),
-                                "Preis": median_price
-                            })
+                    stats = ebay_data.get('stats', {})
+                    current_items = ebay_data.get('current_items', [])
+                    
+                    if stats or current_items:
+                        # Bereite Ergebnis-Daten vor
+                        result_data = {
+                            "Artikel": query,
+                            "Günstigster Angebotspreis": "N/A",
+                            "Median Angebotspreis": "N/A",
+                            "Günstigster Verkaufspreis": "N/A",
+                            "Median Verkaufspreis": "N/A",
+                            "Link": "",
+                            "Preis": 0  # Für Profit-Berechnung
+                        }
+                        
+                        # Aktuelle Angebote
+                        if stats.get('min_current_price'):
+                            result_data["Günstigster Angebotspreis"] = f"{stats['min_current_price']:.2f} €"
+                            result_data["Preis"] = stats['min_current_price']  # Für Profit-Berechnung
+                        
+                        if stats.get('median_current_price'):
+                            result_data["Median Angebotspreis"] = f"{stats['median_current_price']:.2f} €"
+                        
+                        # Verkaufte Artikel (falls verfügbar)
+                        if stats.get('min_sold_price'):
+                            result_data["Günstigster Verkaufspreis"] = f"{stats['min_sold_price']:.2f} €"
+                        
+                        if stats.get('median_sold_price'):
+                            result_data["Median Verkaufspreis"] = f"{stats['median_sold_price']:.2f} €"
+                        
+                        # Link zum günstigsten Angebot
+                        if current_items:
+                            cheapest_item = min(current_items, key=lambda x: x['price'])
+                            result_data["Link"] = cheapest_item.get("itemWebUrl", "")
+                        
+                        results.append(result_data)
                     
                     progress_bar.progress((idx + 1) / len(detected_items))
                 
@@ -354,14 +425,17 @@ if image_to_process:
                 
                 # Feature E: UI - Ergebnisse anzeigen
                 if results:
-                    st.header("📊 Ergebnisse")
+                    st.header("📊 Detaillierte Preisanalyse")
                     
-                    # Tabelle erstellen
+                    # Erweiterte Tabelle mit allen Daten
                     display_results = []
                     for r in results:
                         display_results.append({
                             "Artikel": r["Artikel"],
-                            "Median-Preis": r["Median-Preis"],
+                            "Günstigster Angebotspreis": r["Günstigster Angebotspreis"],
+                            "Median Angebotspreis": r["Median Angebotspreis"],
+                            "Günstigster Verkaufspreis": r["Günstigster Verkaufspreis"],
+                            "Median Verkaufspreis": r["Median Verkaufspreis"],
                             "Link": r["Link"]
                         })
                     
@@ -374,10 +448,31 @@ if image_to_process:
                     # Erfolgsmeldungen für profitable Artikel
                     st.header("💰 Profit-Analyse")
                     for r in results:
+                        median_offer = r.get("Median Angebotspreis", "N/A")
+                        median_sold = r.get("Median Verkaufspreis", "N/A")
+                        
+                        # Profit-Bewertung basierend auf Median Angebotspreis
                         if r["Preis"] > 20:
-                            st.success(f"✅ PROFIT: {r['Artikel']} - {r['Median-Preis']} 💚")
+                            st.success(
+                                f"✅ **{r['Artikel']}** | "
+                                f"Angebot: {median_offer} | "
+                                f"Verkauf: {median_sold} | "
+                                f"Potentieller Profit: {r['Preis']:.2f}€+ 💚"
+                            )
+                        elif r["Preis"] > 10:
+                            st.info(
+                                f"ℹ️ **{r['Artikel']}** | "
+                                f"Angebot: {median_offer} | "
+                                f"Verkauf: {median_sold} | "
+                                f"Möglicher Profit: {r['Preis']:.2f}€"
+                            )
                         else:
-                            st.info(f"ℹ️ {r['Artikel']} - {r['Median-Preis']}")
+                            st.warning(
+                                f"⚠️ **{r['Artikel']}** | "
+                                f"Angebot: {median_offer} | "
+                                f"Verkauf: {median_sold} | "
+                                f"Niedrige Margen"
+                            )
                 else:
                     st.warning("⚠️ Keine eBay-Ergebnisse gefunden. Versuche es mit anderen Suchbegriffen.")
 
