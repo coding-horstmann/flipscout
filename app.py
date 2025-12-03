@@ -7,6 +7,7 @@ from typing import List, Dict, Optional
 import statistics
 from io import BytesIO
 from datetime import datetime
+import time
 
 # Seite konfigurieren
 st.set_page_config(
@@ -20,10 +21,32 @@ st.set_page_config(
 # ============================================================================
 
 def check_password():
-    """Prüft das Passwort und speichert den Login-Status in session_state"""
+    """Prüft das Passwort und speichert den Login-Status in session_state mit Timeout"""
+    # Initialisiere session_state Variablen
     if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
+    if "last_activity" not in st.session_state:
+        st.session_state.last_activity = None
     
+    # Prüfe ob Benutzer eingeloggt ist
+    if st.session_state.authenticated:
+        # Prüfe ob mehr als 1 Stunde (3600 Sekunden) seit letzter Aktivität vergangen ist
+        if st.session_state.last_activity is not None:
+            time_since_activity = time.time() - st.session_state.last_activity
+            if time_since_activity > 3600:  # 1 Stunde = 3600 Sekunden
+                # Automatisches Abmelden nach 1 Stunde Inaktivität
+                st.session_state.authenticated = False
+                st.session_state.last_activity = None
+                st.warning("⏰ Sie wurden nach 1 Stunde Inaktivität automatisch abgemeldet.")
+                st.rerun()
+            else:
+                # Aktualisiere letzte Aktivität bei jeder Interaktion
+                st.session_state.last_activity = time.time()
+        else:
+            # Setze letzte Aktivität wenn nicht gesetzt
+            st.session_state.last_activity = time.time()
+    
+    # Wenn nicht eingeloggt, zeige Login-Formular
     if not st.session_state.authenticated:
         st.title("🔐 Flipscout Login")
         password = st.text_input("Passwort eingeben:", type="password")
@@ -32,6 +55,7 @@ def check_password():
             try:
                 if password == st.secrets["APP_PASSWORD"]:
                     st.session_state.authenticated = True
+                    st.session_state.last_activity = time.time()  # Setze Zeitstempel beim Login
                     st.rerun()
                 else:
                     st.error("❌ Falsches Passwort!")
@@ -42,6 +66,14 @@ def check_password():
 
 # Passwort-Check vor allem anderen
 check_password()
+
+# Logout-Button in der Sidebar
+with st.sidebar:
+    st.markdown("---")
+    if st.button("🚪 Abmelden", type="secondary", use_container_width=True):
+        st.session_state.authenticated = False
+        st.session_state.last_activity = None
+        st.rerun()
 
 # ============================================================================
 # HILFSFUNKTIONEN FÜR EBAY API
