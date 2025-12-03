@@ -710,46 +710,53 @@ if image_to_process:
                                         if not retry_image_bytes:
                                             st.error("❌ Bild nicht mehr verfügbar. Bitte analysiere das Bild erneut.")
                                         else:
-                                            with st.spinner(f"Suche nach Alternativen für '{r['original_query']}'..."):
-                                                # Frage Gemini nach alternativen Suchbegriffen
+                                            # Zeige Info-Box
+                                            st.info(f"🔄 Starte alternative Suche für: **{r['original_query']}**")
+                                            
+                                            # Frage Gemini nach alternativen Suchbegriffen
+                                            with st.spinner("Analysiere Bild für alternative Suchbegriffe..."):
                                                 alternative_queries = get_alternative_search_terms(retry_image_bytes, r['original_query'])
+                                            
+                                            if alternative_queries:
+                                                st.success(f"✅ Gefundene Alternativen: {', '.join(alternative_queries[:3])}")
                                                 
-                                                if alternative_queries:
-                                                    st.info(f"🔄 Gefundene Alternativen: {', '.join(alternative_queries[:3])}")
+                                                # Probiere alternative Suchbegriffe
+                                                retry_success = False
+                                                for idx_alt, alt_query in enumerate(alternative_queries, 1):
+                                                    if not alt_query or alt_query == r['original_query']:
+                                                        continue
                                                     
-                                                    # Probiere alternative Suchbegriffe
-                                                    retry_success = False
-                                                    for idx_alt, alt_query in enumerate(alternative_queries, 1):
-                                                        if not alt_query or alt_query == r['original_query']:
-                                                            continue
-                                                        
-                                                        st.write(f"🔍 **Versuch {idx_alt}:** {alt_query}")
+                                                    # Zeige jeden Versuch deutlich an
+                                                    st.markdown(f"---")
+                                                    st.markdown(f"### 🔍 Versuch {idx_alt}: {alt_query}")
+                                                    
+                                                    with st.spinner(f"Suche bei eBay nach '{alt_query}'..."):
                                                         ebay_data_retry = search_ebay_items(alt_query, max_results=50)
-                                                        
-                                                        stats_retry = ebay_data_retry.get('stats', {})
-                                                        current_items_retry = ebay_data_retry.get('current_items', [])
-                                                        
-                                                        if stats_retry or current_items_retry:
-                                                            # Erfolg!
-                                                            retry_result = {
-                                                                "Artikel": alt_query,
-                                                                "Günstigster Angebotspreis (inkl. Versand)": f"{stats_retry.get('min_current_price', 0):.2f} €" if stats_retry.get('min_current_price') else "N/A",
-                                                                "Median Angebotspreis (inkl. Versand)": f"{stats_retry.get('median_current_price', 0):.2f} €" if stats_retry.get('median_current_price') else "N/A",
-                                                                "Link": current_items_retry[0].get("itemWebUrl", "") if current_items_retry else "",
-                                                                "Preis": stats_retry.get('min_current_price', 0)
-                                                            }
-                                                            
-                                                            st.success(f"✅ **Erfolg mit:** {alt_query}")
-                                                            st.dataframe([retry_result], use_container_width=True, hide_index=True)
-                                                            retry_success = True
-                                                            break
-                                                        else:
-                                                            st.write(f"❌ Keine Ergebnisse für: {alt_query}")
                                                     
-                                                    if not retry_success:
-                                                        st.warning("⚠️ Auch die Alternativen haben keine Ergebnisse geliefert.")
-                                                else:
-                                                    st.warning("⚠️ Keine Alternativen gefunden.")
+                                                    stats_retry = ebay_data_retry.get('stats', {})
+                                                    current_items_retry = ebay_data_retry.get('current_items', [])
+                                                    
+                                                    if stats_retry or current_items_retry:
+                                                        # Erfolg!
+                                                        retry_result = {
+                                                            "Artikel": alt_query,
+                                                            "Günstigster Angebotspreis (inkl. Versand)": f"{stats_retry.get('min_current_price', 0):.2f} €" if stats_retry.get('min_current_price') else "N/A",
+                                                            "Median Angebotspreis (inkl. Versand)": f"{stats_retry.get('median_current_price', 0):.2f} €" if stats_retry.get('median_current_price') else "N/A",
+                                                            "Link": current_items_retry[0].get("itemWebUrl", "") if current_items_retry else "",
+                                                            "Preis": stats_retry.get('min_current_price', 0)
+                                                        }
+                                                        
+                                                        st.success(f"✅ **ERFOLG!** Gefunden mit: {alt_query}")
+                                                        st.dataframe([retry_result], use_container_width=True, hide_index=True)
+                                                        retry_success = True
+                                                        break
+                                                    else:
+                                                        st.warning(f"❌ Keine Ergebnisse für: {alt_query}")
+                                                
+                                                if not retry_success:
+                                                    st.error("⚠️ **Keine der Alternativen hat Ergebnisse geliefert.**")
+                                            else:
+                                                st.warning("⚠️ Keine Alternativen gefunden.")
                                 st.markdown("---")
                 else:
                     st.warning("⚠️ Keine eBay-Ergebnisse gefunden. Versuche es mit anderen Suchbegriffen.")
