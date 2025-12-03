@@ -121,16 +121,22 @@ def search_ebay_items(query: str, max_results: int = 50) -> Dict:
         # Versuche zuerst ohne Sortierung (falls Sortierung nicht unterstützt wird)
         response = requests.get(url, headers=headers, params=params, timeout=15)
         
-        # Falls Fehler, versuche mit Sortierung
-        if response.status_code != 200:
-            params_with_sort = params.copy()
-            params_with_sort["sort"] = "price"
-            response = requests.get(url, headers=headers, params=params_with_sort, timeout=15)
-        
         current_items = []
         if response.status_code == 200:
             data = response.json()
             items = data.get("itemSummaries", [])
+            
+            # Debug: Prüfe ob Items gefunden wurden
+            if not items:
+                # Versuche ohne Filter, falls Filter zu restriktiv ist
+                params_no_filter = {
+                    "q": query,
+                    "limit": min(max_results, 200)
+                }
+                response_no_filter = requests.get(url, headers=headers, params=params_no_filter, timeout=15)
+                if response_no_filter.status_code == 200:
+                    data_no_filter = response_no_filter.json()
+                    items = data_no_filter.get("itemSummaries", [])
             
             for item in items:
                 price_info = item.get("price", {})
@@ -173,9 +179,60 @@ def search_ebay_items(query: str, max_results: int = 50) -> Dict:
             # Debug-Informationen bei Fehler
             try:
                 error_data = response.json()
-                st.warning(f"⚠️ eBay API Fehler {response.status_code}: {error_data}")
+                error_msg = str(error_data)[:500]  # Begrenze Länge
+                st.error(f"❌ eBay API Fehler {response.status_code}: {error_msg}")
             except:
-                st.warning(f"⚠️ eBay API Fehler {response.status_code}: {response.text[:200]}")
+                error_text = response.text[:500] if hasattr(response, 'text') else str(response)
+                st.error(f"❌ eBay API Fehler {response.status_code}: {error_text}")
+        
+        # Debug: Zeige Anzahl gefundener Items
+        if not current_items:
+            # Versuche eine einfachere Suche ohne Filter
+            try:
+                simple_params = {"q": query, "limit": 20}
+                simple_response = requests.get(url, headers=headers, params=simple_params, timeout=15)
+                if simple_response.status_code == 200:
+                    simple_data = simple_response.json()
+                    simple_items = simple_data.get("itemSummaries", [])
+                    if simple_items:
+                        # Verarbeite einfache Items ohne Filter
+                        for item in simple_items:
+                            price_info = item.get("price", {})
+                            if price_info:
+                                price_value = price_info.get("value", "0")
+                                currency = price_info.get("currency", "EUR")
+                                
+                                shipping_cost = 0.0
+                                shipping_options = item.get("shippingOptions", [])
+                                if shipping_options:
+                                    first_shipping = shipping_options[0]
+                                    shipping_cost_info = first_shipping.get("shippingCost", {})
+                                    if shipping_cost_info:
+                                        shipping_cost_value = shipping_cost_info.get("value", "0")
+                                        try:
+                                            shipping_cost = float(shipping_cost_value)
+                                        except ValueError:
+                                            shipping_cost = 0.0
+                                
+                                try:
+                                    price_float = float(price_value)
+                                    price_with_shipping = price_float + shipping_cost
+                                    
+                                    current_items.append({
+                                        "title": item.get("title", "Unbekannt"),
+                                        "price": price_float,
+                                        "price_with_shipping": price_with_shipping,
+                                        "shipping_cost": shipping_cost,
+                                        "currency": currency,
+                                        "itemId": item.get("itemId", ""),
+                                        "itemWebUrl": item.get("itemWebUrl", ""),
+                                        "condition": item.get("condition", "Unbekannt"),
+                                        "availability": "available"
+                                    })
+                                except ValueError:
+                                    continue
+            except Exception as e:
+                pass  # Ignoriere Fehler bei Fallback-Suche
         
         # 2. Versuche Marketplace Insights API für Verkaufsdaten (letzte 90 Tage)
         sold_items = []
