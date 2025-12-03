@@ -180,8 +180,23 @@ def analyze_image_with_gemini(image_bytes: bytes) -> List[Dict]:
         api_key = st.secrets["GOOGLE_API_KEY"]
         genai.configure(api_key=api_key)
         
-        # Verwende gemini-1.5-pro als stabiles Modell (falls nicht verfügbar, auf gemini-pro ändern)
-        model = genai.GenerativeModel('gemini-1.5-pro')
+        # Versuche verschiedene Modellnamen (Fallback-Mechanismus)
+        model_names = ['gemini-1.5-pro', 'gemini-pro', 'gemini-1.5-flash']
+        model = None
+        last_error = None
+        
+        for model_name in model_names:
+            try:
+                model = genai.GenerativeModel(model_name)
+                # Teste ob das Modell verfügbar ist
+                break
+            except Exception as e:
+                last_error = str(e)
+                continue
+        
+        if model is None:
+            st.error(f"❌ Kein verfügbares Gemini-Modell gefunden. Letzter Fehler: {last_error}")
+            return []
         
         prompt = """Analysiere das Bild. Identifiziere alle Medienartikel (Bücher, Videospiele, DVDs, CDs, Blu-rays, etc.).
 
