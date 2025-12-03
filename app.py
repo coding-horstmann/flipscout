@@ -115,11 +115,17 @@ def search_ebay_items(query: str, max_results: int = 50) -> Dict:
         params = {
             "q": query,
             "limit": min(max_results, 200),  # Mehr Ergebnisse für bessere Statistik
-            "filter": "conditions:{USED|VERY_GOOD|GOOD|ACCEPTABLE}",
-            "sort": "price"  # Sortiere nach Preis (aufsteigend)
+            "filter": "conditions:{USED|VERY_GOOD|GOOD|ACCEPTABLE}"
         }
         
+        # Versuche zuerst ohne Sortierung (falls Sortierung nicht unterstützt wird)
         response = requests.get(url, headers=headers, params=params, timeout=15)
+        
+        # Falls Fehler, versuche mit Sortierung
+        if response.status_code != 200:
+            params_with_sort = params.copy()
+            params_with_sort["sort"] = "price"
+            response = requests.get(url, headers=headers, params=params_with_sort, timeout=15)
         
         current_items = []
         if response.status_code == 200:
@@ -163,6 +169,13 @@ def search_ebay_items(query: str, max_results: int = 50) -> Dict:
                         })
                     except ValueError:
                         continue
+        else:
+            # Debug-Informationen bei Fehler
+            try:
+                error_data = response.json()
+                st.warning(f"⚠️ eBay API Fehler {response.status_code}: {error_data}")
+            except:
+                st.warning(f"⚠️ eBay API Fehler {response.status_code}: {response.text[:200]}")
         
         # 2. Versuche Marketplace Insights API für Verkaufsdaten (letzte 90 Tage)
         sold_items = []
