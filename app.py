@@ -639,27 +639,32 @@ if image_to_process:
                 
                 # Feature E: UI - Ergebnisse anzeigen
                 if results:
-                    st.header("📊 Detaillierte Preisanalyse")
+                    # Trenne Ergebnisse mit und ohne Daten
+                    results_with_data = [r for r in results if not r.get("no_results", False)]
+                    results_no_data = [r for r in results if r.get("no_results", False)]
                     
-                    # Erweiterte Tabelle mit allen Daten
-                    display_results = []
-                    for r in results:
-                        display_results.append({
-                            "Artikel": r["Artikel"],
-                            "Günstigster Angebotspreis (inkl. Versand)": r["Günstigster Angebotspreis (inkl. Versand)"],
-                            "Median Angebotspreis (inkl. Versand)": r["Median Angebotspreis (inkl. Versand)"],
-                            "Link": r["Link"]
-                        })
-                    
-                    st.dataframe(
-                        display_results,
-                        use_container_width=True,
-                        hide_index=True
-                    )
-                    
-                    # Erfolgsmeldungen für profitable Artikel
-                    st.header("💰 Profit-Analyse")
-                    for r in results:
+                    # Zeige Ergebnisse mit Daten
+                    if results_with_data:
+                        st.header("📊 Detaillierte Preisanalyse")
+                        
+                        display_results = []
+                        for r in results_with_data:
+                            display_results.append({
+                                "Artikel": r["Artikel"],
+                                "Günstigster Angebotspreis (inkl. Versand)": r["Günstigster Angebotspreis (inkl. Versand)"],
+                                "Median Angebotspreis (inkl. Versand)": r["Median Angebotspreis (inkl. Versand)"],
+                                "Link": r["Link"]
+                            })
+                        
+                        st.dataframe(
+                            display_results,
+                            use_container_width=True,
+                            hide_index=True
+                        )
+                        
+                        # Erfolgsmeldungen für profitable Artikel
+                        st.header("💰 Profit-Analyse")
+                        for r in results_with_data:
                         median_offer = r.get("Median Angebotspreis (inkl. Versand)", "N/A")
                         min_offer = r.get("Günstigster Angebotspreis (inkl. Versand)", "N/A")
                         
@@ -685,6 +690,57 @@ if image_to_process:
                                 f"Median: {median_offer} | "
                                 f"Niedrige Margen"
                             )
+                    
+                    # Manuelle Retry-Option für Artikel ohne Ergebnisse
+                    if results_no_data:
+                        st.header("⚠️ Keine Ergebnisse gefunden")
+                        for r_idx, r in enumerate(results_no_data):
+                            with st.container():
+                                col1, col2 = st.columns([3, 1])
+                                with col1:
+                                    st.write(f"**{r['original_query']}** - Keine eBay-Ergebnisse gefunden")
+                                with col2:
+                                    retry_key = f"retry_{r_idx}_{r['original_query']}"
+                                    if st.button("🔄 Alternative suchen", key=retry_key):
+                                        with st.spinner(f"Suche nach Alternativen für '{r['original_query']}'..."):
+                                            # Frage Gemini nach alternativen Suchbegriffen
+                                            alternative_queries = get_alternative_search_terms(image_bytes, r['original_query'])
+                                            
+                                            if alternative_queries:
+                                                st.info(f"🔄 Probiere Alternativen: {', '.join(alternative_queries[:3])}")
+                                                
+                                                # Probiere alternative Suchbegriffe
+                                                retry_success = False
+                                                for alt_query in alternative_queries:
+                                                    if not alt_query or alt_query == r['original_query']:
+                                                        continue
+                                                    
+                                                    st.write(f"🔍 Versuche: {alt_query}")
+                                                    ebay_data_retry = search_ebay_items(alt_query, max_results=50)
+                                                    
+                                                    stats_retry = ebay_data_retry.get('stats', {})
+                                                    current_items_retry = ebay_data_retry.get('current_items', [])
+                                                    
+                                                    if stats_retry or current_items_retry:
+                                                        # Erfolg!
+                                                        retry_result = {
+                                                            "Artikel": alt_query,
+                                                            "Günstigster Angebotspreis (inkl. Versand)": f"{stats_retry.get('min_current_price', 0):.2f} €" if stats_retry.get('min_current_price') else "N/A",
+                                                            "Median Angebotspreis (inkl. Versand)": f"{stats_retry.get('median_current_price', 0):.2f} €" if stats_retry.get('median_current_price') else "N/A",
+                                                            "Link": current_items_retry[0].get("itemWebUrl", "") if current_items_retry else "",
+                                                            "Preis": stats_retry.get('min_current_price', 0)
+                                                        }
+                                                        
+                                                        st.success(f"✅ Erfolg mit: {alt_query}")
+                                                        st.dataframe([retry_result], use_container_width=True, hide_index=True)
+                                                        retry_success = True
+                                                        break
+                                                
+                                                if not retry_success:
+                                                    st.warning("⚠️ Auch die Alternativen haben keine Ergebnisse geliefert.")
+                                            else:
+                                                st.warning("⚠️ Keine Alternativen gefunden.")
+                                st.markdown("---")
                 else:
                     st.warning("⚠️ Keine eBay-Ergebnisse gefunden. Versuche es mit anderen Suchbegriffen.")
 
