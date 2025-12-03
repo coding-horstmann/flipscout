@@ -180,7 +180,8 @@ def analyze_image_with_gemini(image_bytes: bytes) -> List[Dict]:
         api_key = st.secrets["GOOGLE_API_KEY"]
         genai.configure(api_key=api_key)
         
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        # Verwende gemini-1.5-pro als stabiles Modell (falls nicht verfügbar, auf gemini-pro ändern)
+        model = genai.GenerativeModel('gemini-1.5-pro')
         
         prompt = """Analysiere das Bild. Identifiziere alle Medienartikel (Bücher, Videospiele, DVDs, CDs, Blu-rays, etc.).
 
