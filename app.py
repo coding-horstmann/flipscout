@@ -331,18 +331,33 @@ def analyze_image_with_gemini(image_bytes: bytes) -> List[Dict]:
             'models/gemini-2.5-pro',          # Fallback: Nur 50 RPD
         ]
         
-        prompt = """Analysiere das Bild. Identifiziere alle Medienartikel (Bücher, Videospiele, DVDs, CDs, Blu-rays, etc.).
+        prompt = """Analysiere das Bild gründlich. Identifiziere ALLE Medienartikel (Bücher, Videospiele, DVDs, CDs, Blu-rays, etc.).
 
-Gib mir NUR ein valides JSON Array zurück. Jedes Objekt muss das Feld 'query_text' enthalten (bestehend aus genauem Titel und Plattform/Autor für die beste eBay-Suche).
+WICHTIG für Bücher:
+- Erkenne Bücher auch von der Seite/Buchrücken (nicht nur Frontcover)
+- Lies den Text auf dem Buchrücken sorgfältig
+- Erkenne auch teilweise sichtbare Bücher
+- Kombiniere alle sichtbaren Informationen (Titel, Autor, Verlag, ISBN falls sichtbar)
+
+Für alle Artikel:
+- Nutze den vollständigen Titel wenn möglich
+- Füge Autor/Plattform hinzu für bessere eBay-Suche
+- Sei präzise aber nicht zu spezifisch (z.B. "Harry Potter Buch" statt "Harry Potter und der Stein der Weisen Hardcover Erstausgabe")
+
+Gib mir NUR ein valides JSON Array zurück. Jedes Objekt muss das Feld 'query_text' enthalten.
 
 Beispiel-Format:
 [
   {"query_text": "Harry Potter und der Stein der Weisen Buch"},
   {"query_text": "PlayStation 5 FIFA 23"},
-  {"query_text": "Matrix DVD"}
+  {"query_text": "Matrix DVD"},
+  {"query_text": "Miller's Garden Antiques Buch"}
 ]
 
-WICHTIG: Gib NUR das JSON Array zurück, keine zusätzlichen Erklärungen oder Markdown."""
+WICHTIG: 
+- Gib NUR das JSON Array zurück, keine zusätzlichen Erklärungen oder Markdown
+- Erkenne auch Bücher die nur von der Seite sichtbar sind
+- Lies den Text auf Buchrücken sorgfältig"""
 
         # Lade das Bild
         image_data = {
