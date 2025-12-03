@@ -713,7 +713,8 @@ if image_to_process:
                                             else:
                                                 # Frage Gemini nach alternativen Suchbegriffen
                                                 alternative_queries = get_alternative_search_terms(retry_image_bytes, r['original_query'])
-                                            
+                                                
+                                                if alternative_queries:
                                                     st.info(f"🔄 Probiere Alternativen: {', '.join(alternative_queries[:3])}")
                                                     
                                                     # Probiere alternative Suchbegriffe
