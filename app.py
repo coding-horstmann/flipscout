@@ -447,6 +447,86 @@ WICHTIG:
         return []
 
 
+def get_alternative_search_terms(image_bytes: bytes, original_query: str) -> List[str]:
+    """
+    Fragt Gemini nach alternativen Suchbegriffen, wenn die ursprüngliche Suche keine Ergebnisse lieferte
+    """
+    try:
+        api_key = st.secrets["GOOGLE_API_KEY"]
+        genai.configure(api_key=api_key)
+        
+        model_names = [
+            'models/gemini-2.5-flash-lite',
+            'models/gemini-2.0-flash-lite',
+            'models/gemini-2.5-flash',
+        ]
+        
+        retry_prompt = f"""Ich habe nach "{original_query}" auf eBay gesucht, aber keine Ergebnisse gefunden.
+
+Analysiere das Bild nochmal und gib mir 2-3 alternative Suchbegriffe, die ich stattdessen probieren könnte.
+
+Mögliche Gründe für fehlende Ergebnisse:
+- Der Titel könnte anders geschrieben sein
+- Es könnte ein anderer Autor/Plattform-Name sein
+- Der Titel könnte verkürzt oder anders formuliert sein
+- Es könnte ein ähnliches, aber anderes Produkt sein
+
+Gib mir NUR ein valides JSON Array zurück mit alternativen Suchbegriffen.
+
+Beispiel-Format:
+[
+  {{"query_text": "Kürzerer Titel"},
+  {{"query_text": "Titel ohne Autor"},
+  {{"query_text": "Alternative Schreibweise"}}
+]
+
+WICHTIG: 
+- Gib NUR das JSON Array zurück, keine zusätzlichen Erklärungen
+- Maximal 3 alternative Suchbegriffe
+- Sei kreativ aber realistisch"""
+
+        image_data = {
+            "mime_type": "image/jpeg",
+            "data": image_bytes
+        }
+        
+        for model_name in model_names:
+            try:
+                model = genai.GenerativeModel(model_name)
+                response = model.generate_content([retry_prompt, image_data])
+                
+                # Extrahiere JSON aus der Antwort
+                response_text = response.text.strip()
+                
+                # Entferne Markdown-Code-Blöcke falls vorhanden
+                if response_text.startswith("```json"):
+                    response_text = response_text[7:]
+                if response_text.startswith("```"):
+                    response_text = response_text[3:]
+                if response_text.endswith("```"):
+                    response_text = response_text[:-3]
+                
+                response_text = response_text.strip()
+                
+                # Parse JSON
+                try:
+                    alternatives = json.loads(response_text)
+                    if isinstance(alternatives, list):
+                        # Extrahiere query_text aus jedem Objekt
+                        search_terms = [alt.get("query_text", "") for alt in alternatives if alt.get("query_text")]
+                        return search_terms[:3]  # Maximal 3 Alternativen
+                except json.JSONDecodeError:
+                    continue
+                    
+            except Exception:
+                continue
+        
+        return []
+        
+    except Exception as e:
+        return []
+
+
 # ============================================================================
 # HAUPTPROGRAMM
 # ============================================================================
@@ -514,6 +594,29 @@ if image_to_process:
                     
                     stats = ebay_data.get('stats', {})
                     current_items = ebay_data.get('current_items', [])
+                    
+                    # Retry-Logik: Wenn keine Ergebnisse, versuche alternative Suchbegriffe
+                    if not stats and not current_items:
+                        status_text.text(f"🔄 Keine Ergebnisse für '{query}'. Suche nach Alternativen... ({idx + 1}/{len(detected_items)})")
+                        
+                        # Frage Gemini nach alternativen Suchbegriffen
+                        alternative_queries = get_alternative_search_terms(image_bytes, query)
+                        
+                        # Probiere alternative Suchbegriffe
+                        for alt_query in alternative_queries:
+                            if not alt_query or alt_query == query:
+                                continue
+                                
+                            status_text.text(f"🔄 Versuche Alternative: {alt_query} ({idx + 1}/{len(detected_items)})")
+                            ebay_data = search_ebay_items(alt_query, max_results=50)
+                            
+                            stats = ebay_data.get('stats', {})
+                            current_items = ebay_data.get('current_items', [])
+                            
+                            if stats or current_items:
+                                # Erfolg mit alternativem Suchbegriff!
+                                query = alt_query  # Verwende den erfolgreichen Suchbegriff
+                                break  # Stoppe weitere Versuche
                     
                     if stats or current_items:
                         # Bereite Ergebnis-Daten vor
