@@ -595,29 +595,6 @@ if image_to_process:
                     stats = ebay_data.get('stats', {})
                     current_items = ebay_data.get('current_items', [])
                     
-                    # Retry-Logik: Wenn keine Ergebnisse, versuche alternative Suchbegriffe
-                    if not stats and not current_items:
-                        status_text.text(f"🔄 Keine Ergebnisse für '{query}'. Suche nach Alternativen... ({idx + 1}/{len(detected_items)})")
-                        
-                        # Frage Gemini nach alternativen Suchbegriffen
-                        alternative_queries = get_alternative_search_terms(image_bytes, query)
-                        
-                        # Probiere alternative Suchbegriffe
-                        for alt_query in alternative_queries:
-                            if not alt_query or alt_query == query:
-                                continue
-                                
-                            status_text.text(f"🔄 Versuche Alternative: {alt_query} ({idx + 1}/{len(detected_items)})")
-                            ebay_data = search_ebay_items(alt_query, max_results=50)
-                            
-                            stats = ebay_data.get('stats', {})
-                            current_items = ebay_data.get('current_items', [])
-                            
-                            if stats or current_items:
-                                # Erfolg mit alternativem Suchbegriff!
-                                query = alt_query  # Verwende den erfolgreichen Suchbegriff
-                                break  # Stoppe weitere Versuche
-                    
                     if stats or current_items:
                         # Bereite Ergebnis-Daten vor
                         result_data = {
@@ -643,6 +620,17 @@ if image_to_process:
                             result_data["Link"] = cheapest_item.get("itemWebUrl", "")
                         
                         results.append(result_data)
+                    else:
+                        # Keine Ergebnisse gefunden - speichere für manuellen Retry
+                        results.append({
+                            "Artikel": query,
+                            "Günstigster Angebotspreis (inkl. Versand)": "Keine Ergebnisse",
+                            "Median Angebotspreis (inkl. Versand)": "Keine Ergebnisse",
+                            "Link": "",
+                            "Preis": 0,
+                            "no_results": True,  # Flag für manuellen Retry
+                            "original_query": query
+                        })
                     
                     progress_bar.progress((idx + 1) / len(detected_items))
                 
