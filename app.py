@@ -705,25 +705,25 @@ if image_to_process:
                                 with col2:
                                     retry_key = f"retry_{r_idx}_{r['original_query']}"
                                     if st.button("🔄 Alternative suchen", key=retry_key):
-                                        with st.spinner(f"Suche nach Alternativen für '{r['original_query']}'..."):
-                                            # Hole image_bytes aus session_state
-                                            retry_image_bytes = st.session_state.get('current_image_bytes')
-                                            if not retry_image_bytes:
-                                                st.error("❌ Bild nicht mehr verfügbar. Bitte analysiere das Bild erneut.")
-                                            else:
+                                        # Hole image_bytes aus session_state
+                                        retry_image_bytes = st.session_state.get('current_image_bytes')
+                                        if not retry_image_bytes:
+                                            st.error("❌ Bild nicht mehr verfügbar. Bitte analysiere das Bild erneut.")
+                                        else:
+                                            with st.spinner(f"Suche nach Alternativen für '{r['original_query']}'..."):
                                                 # Frage Gemini nach alternativen Suchbegriffen
                                                 alternative_queries = get_alternative_search_terms(retry_image_bytes, r['original_query'])
                                                 
                                                 if alternative_queries:
-                                                    st.info(f"🔄 Probiere Alternativen: {', '.join(alternative_queries[:3])}")
+                                                    st.info(f"🔄 Gefundene Alternativen: {', '.join(alternative_queries[:3])}")
                                                     
                                                     # Probiere alternative Suchbegriffe
                                                     retry_success = False
-                                                    for alt_query in alternative_queries:
+                                                    for idx_alt, alt_query in enumerate(alternative_queries, 1):
                                                         if not alt_query or alt_query == r['original_query']:
                                                             continue
                                                         
-                                                        st.write(f"🔍 Versuche: {alt_query}")
+                                                        st.write(f"🔍 **Versuch {idx_alt}:** {alt_query}")
                                                         ebay_data_retry = search_ebay_items(alt_query, max_results=50)
                                                         
                                                         stats_retry = ebay_data_retry.get('stats', {})
@@ -739,10 +739,12 @@ if image_to_process:
                                                                 "Preis": stats_retry.get('min_current_price', 0)
                                                             }
                                                             
-                                                            st.success(f"✅ Erfolg mit: {alt_query}")
+                                                            st.success(f"✅ **Erfolg mit:** {alt_query}")
                                                             st.dataframe([retry_result], use_container_width=True, hide_index=True)
                                                             retry_success = True
                                                             break
+                                                        else:
+                                                            st.write(f"❌ Keine Ergebnisse für: {alt_query}")
                                                     
                                                     if not retry_success:
                                                         st.warning("⚠️ Auch die Alternativen haben keine Ergebnisse geliefert.")
