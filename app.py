@@ -475,9 +475,9 @@ Gib mir NUR ein valides JSON Array zurück mit alternativen Suchbegriffen.
 
 Beispiel-Format:
 [
-  {{"query_text": "Kürzerer Titel"},
-  {{"query_text": "Titel ohne Autor"},
-  {{"query_text": "Alternative Schreibweise"}}
+  {"query_text": "Kürzerer Titel"},
+  {"query_text": "Titel ohne Autor"},
+  {"query_text": "Alternative Schreibweise"}
 ]
 
 WICHTIG: 
