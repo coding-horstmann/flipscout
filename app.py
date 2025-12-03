@@ -131,11 +131,29 @@ def search_ebay_items(query: str, max_results: int = 20) -> Dict:
                     price_value = price_info.get("value", "0")
                     currency = price_info.get("currency", "EUR")
                     
+                    # Versandkosten extrahieren
+                    shipping_cost = 0.0
+                    shipping_options = item.get("shippingOptions", [])
+                    if shipping_options:
+                        # Nimm die erste Versandoption (meist günstigste)
+                        first_shipping = shipping_options[0]
+                        shipping_cost_info = first_shipping.get("shippingCost", {})
+                        if shipping_cost_info:
+                            shipping_cost_value = shipping_cost_info.get("value", "0")
+                            try:
+                                shipping_cost = float(shipping_cost_value)
+                            except ValueError:
+                                shipping_cost = 0.0
+                    
                     try:
                         price_float = float(price_value)
+                        price_with_shipping = price_float + shipping_cost
+                        
                         current_items.append({
                             "title": item.get("title", "Unbekannt"),
                             "price": price_float,
+                            "price_with_shipping": price_with_shipping,
+                            "shipping_cost": shipping_cost,
                             "currency": currency,
                             "itemId": item.get("itemId", ""),
                             "itemWebUrl": item.get("itemWebUrl", ""),
@@ -170,16 +188,17 @@ def search_ebay_items(query: str, max_results: int = 20) -> Dict:
             # Marketplace Insights API nicht verfügbar oder nicht autorisiert
             pass
         
-        # 3. Berechne Statistiken
+        # 3. Berechne Statistiken (inklusive Versandkosten)
         stats = {}
         
         if current_items:
-            current_prices = [item["price"] for item in current_items]
-            current_prices.sort()
+            # Preise mit Versandkosten für Statistiken
+            current_prices_with_shipping = [item["price_with_shipping"] for item in current_items]
+            current_prices_with_shipping.sort()
             
-            stats['min_current_price'] = min(current_prices)
-            stats['median_current_price'] = statistics.median(current_prices) if current_prices else None
-            stats['max_current_price'] = max(current_prices)
+            stats['min_current_price'] = min(current_prices_with_shipping)
+            stats['median_current_price'] = statistics.median(current_prices_with_shipping) if current_prices_with_shipping else None
+            stats['max_current_price'] = max(current_prices_with_shipping)
             stats['count_current'] = len(current_items)
         
         if sold_items:
@@ -388,32 +407,23 @@ if image_to_process:
                         # Bereite Ergebnis-Daten vor
                         result_data = {
                             "Artikel": query,
-                            "Günstigster Angebotspreis": "N/A",
-                            "Median Angebotspreis": "N/A",
-                            "Günstigster Verkaufspreis": "N/A",
-                            "Median Verkaufspreis": "N/A",
+                            "Günstigster Angebotspreis (inkl. Versand)": "N/A",
+                            "Median Angebotspreis (inkl. Versand)": "N/A",
                             "Link": "",
                             "Preis": 0  # Für Profit-Berechnung
                         }
                         
-                        # Aktuelle Angebote
+                        # Aktuelle Angebote (inklusive Versandkosten)
                         if stats.get('min_current_price'):
-                            result_data["Günstigster Angebotspreis"] = f"{stats['min_current_price']:.2f} €"
+                            result_data["Günstigster Angebotspreis (inkl. Versand)"] = f"{stats['min_current_price']:.2f} €"
                             result_data["Preis"] = stats['min_current_price']  # Für Profit-Berechnung
                         
                         if stats.get('median_current_price'):
-                            result_data["Median Angebotspreis"] = f"{stats['median_current_price']:.2f} €"
+                            result_data["Median Angebotspreis (inkl. Versand)"] = f"{stats['median_current_price']:.2f} €"
                         
-                        # Verkaufte Artikel (falls verfügbar)
-                        if stats.get('min_sold_price'):
-                            result_data["Günstigster Verkaufspreis"] = f"{stats['min_sold_price']:.2f} €"
-                        
-                        if stats.get('median_sold_price'):
-                            result_data["Median Verkaufspreis"] = f"{stats['median_sold_price']:.2f} €"
-                        
-                        # Link zum günstigsten Angebot
+                        # Link zum günstigsten Angebot (mit Versandkosten)
                         if current_items:
-                            cheapest_item = min(current_items, key=lambda x: x['price'])
+                            cheapest_item = min(current_items, key=lambda x: x['price_with_shipping'])
                             result_data["Link"] = cheapest_item.get("itemWebUrl", "")
                         
                         results.append(result_data)
@@ -432,10 +442,8 @@ if image_to_process:
                     for r in results:
                         display_results.append({
                             "Artikel": r["Artikel"],
-                            "Günstigster Angebotspreis": r["Günstigster Angebotspreis"],
-                            "Median Angebotspreis": r["Median Angebotspreis"],
-                            "Günstigster Verkaufspreis": r["Günstigster Verkaufspreis"],
-                            "Median Verkaufspreis": r["Median Verkaufspreis"],
+                            "Günstigster Angebotspreis (inkl. Versand)": r["Günstigster Angebotspreis (inkl. Versand)"],
+                            "Median Angebotspreis (inkl. Versand)": r["Median Angebotspreis (inkl. Versand)"],
                             "Link": r["Link"]
                         })
                     
@@ -448,29 +456,29 @@ if image_to_process:
                     # Erfolgsmeldungen für profitable Artikel
                     st.header("💰 Profit-Analyse")
                     for r in results:
-                        median_offer = r.get("Median Angebotspreis", "N/A")
-                        median_sold = r.get("Median Verkaufspreis", "N/A")
+                        median_offer = r.get("Median Angebotspreis (inkl. Versand)", "N/A")
+                        min_offer = r.get("Günstigster Angebotspreis (inkl. Versand)", "N/A")
                         
-                        # Profit-Bewertung basierend auf Median Angebotspreis
+                        # Profit-Bewertung basierend auf Median Angebotspreis (inkl. Versand)
                         if r["Preis"] > 20:
                             st.success(
                                 f"✅ **{r['Artikel']}** | "
-                                f"Angebot: {median_offer} | "
-                                f"Verkauf: {median_sold} | "
+                                f"Günstigster: {min_offer} | "
+                                f"Median: {median_offer} | "
                                 f"Potentieller Profit: {r['Preis']:.2f}€+ 💚"
                             )
                         elif r["Preis"] > 10:
                             st.info(
                                 f"ℹ️ **{r['Artikel']}** | "
-                                f"Angebot: {median_offer} | "
-                                f"Verkauf: {median_sold} | "
+                                f"Günstigster: {min_offer} | "
+                                f"Median: {median_offer} | "
                                 f"Möglicher Profit: {r['Preis']:.2f}€"
                             )
                         else:
                             st.warning(
                                 f"⚠️ **{r['Artikel']}** | "
-                                f"Angebot: {median_offer} | "
-                                f"Verkauf: {median_sold} | "
+                                f"Günstigster: {min_offer} | "
+                                f"Median: {median_offer} | "
                                 f"Niedrige Margen"
                             )
                 else:
