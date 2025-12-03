@@ -8,6 +8,7 @@ import statistics
 from io import BytesIO
 from datetime import datetime
 import time
+import pandas as pd
 
 # Seite konfigurieren
 st.set_page_config(
@@ -612,10 +613,21 @@ if image_to_process:
                                 "Link": r["Link"]
                             })
                         
+                        # Zeige DataFrame mit klickbaren Links
+                        df = pd.DataFrame(display_results)
+                        
+                        # Verwende LinkColumn um Links klickbar zu machen
                         st.dataframe(
-                            display_results,
+                            df,
                             use_container_width=True,
-                            hide_index=True
+                            hide_index=True,
+                            column_config={
+                                "Link": st.column_config.LinkColumn(
+                                    "🔗 eBay Listing",
+                                    help="Klicken Sie auf den Link, um das eBay Listing zu öffnen",
+                                    display_text="🔗 Listing ansehen"
+                                )
+                            }
                         )
                         
                         # Erfolgsmeldungen für profitable Artikel
