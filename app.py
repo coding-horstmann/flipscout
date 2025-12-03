@@ -331,18 +331,26 @@ def analyze_image_with_gemini(image_bytes: bytes) -> List[Dict]:
             'models/gemini-2.5-pro',          # Fallback: Nur 50 RPD
         ]
         
-        prompt = """Analysiere das Bild gründlich. Identifiziere ALLE Medienartikel (Bücher, Videospiele, DVDs, CDs, Blu-rays, etc.).
+        prompt = """Analysiere das Bild SEHR sorgfältig. Identifiziere ALLE Medienartikel (Bücher, Videospiele, DVDs, CDs, Blu-rays, etc.).
 
-WICHTIG für Bücher:
-- Erkenne Bücher auch von der Seite/Buchrücken (nicht nur Frontcover)
-- Lies den Text auf dem Buchrücken sorgfältig
-- Erkenne auch teilweise sichtbare Bücher
-- Kombiniere alle sichtbaren Informationen (Titel, Autor, Verlag, ISBN falls sichtbar)
+KRITISCH für Bücher von der Seite/Buchrücken:
+- Lies den Text auf dem Buchrücken ZEICHEN FÜR ZEICHEN genau
+- Wenn der Text unscharf oder schwer lesbar ist, sei EXTREM vorsichtig
+- Verwechsle keine ähnlich aussehenden Buchstaben (z.B. "Miller's" nicht mit "Müller's")
+- Prüfe jeden erkannten Titel mehrmals bevor du ihn aufnimmst
+- Wenn du dir nicht sicher bist, gib den Text GENAU SO wieder wie er erscheint, auch wenn er unvollständig ist
+- Kombiniere ALLE sichtbaren Informationen: Titel, Autor, Verlag, Untertitel
+- Bei Buchrücken: Lies von oben nach unten, achte auf Groß-/Kleinschreibung
 
 Für alle Artikel:
-- Nutze den vollständigen Titel wenn möglich
+- Nutze den vollständigen, EXAKTEN Titel wie er auf dem Buch steht
 - Füge Autor/Plattform hinzu für bessere eBay-Suche
-- Sei präzise aber nicht zu spezifisch (z.B. "Harry Potter Buch" statt "Harry Potter und der Stein der Weisen Hardcover Erstausgabe")
+- Sei präzise: Nutze den genauen Titel (z.B. "Miller's Garden Antiques" nicht "Miller Garden Antique")
+
+QUALITÄTSKONTROLLE:
+- Prüfe jeden erkannten Titel auf Plausibilität
+- Wenn ein Titel seltsam aussieht oder du dir unsicher bist, gib ihn trotzdem an, aber so genau wie möglich
+- Bei Buchrücken: Lies den Text mehrmals und vergleiche
 
 Gib mir NUR ein valides JSON Array zurück. Jedes Objekt muss das Feld 'query_text' enthalten.
 
@@ -356,8 +364,8 @@ Beispiel-Format:
 
 WICHTIG: 
 - Gib NUR das JSON Array zurück, keine zusätzlichen Erklärungen oder Markdown
-- Erkenne auch Bücher die nur von der Seite sichtbar sind
-- Lies den Text auf Buchrücken sorgfältig"""
+- Bei Buchrücken: Lies den Text EXTREM sorgfältig, Zeichen für Zeichen
+- Wenn unsicher: Gib den Text trotzdem an, aber so genau wie möglich"""
 
         # Lade das Bild
         image_data = {
