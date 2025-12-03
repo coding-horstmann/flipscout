@@ -182,21 +182,6 @@ def analyze_image_with_gemini(image_bytes: bytes) -> List[Dict]:
         
         # Versuche verschiedene Modellnamen (Fallback-Mechanismus)
         model_names = ['gemini-1.5-pro', 'gemini-pro', 'gemini-1.5-flash']
-        model = None
-        last_error = None
-        
-        for model_name in model_names:
-            try:
-                model = genai.GenerativeModel(model_name)
-                # Teste ob das Modell verfügbar ist
-                break
-            except Exception as e:
-                last_error = str(e)
-                continue
-        
-        if model is None:
-            st.error(f"❌ Kein verfügbares Gemini-Modell gefunden. Letzter Fehler: {last_error}")
-            return []
         
         prompt = """Analysiere das Bild. Identifiziere alle Medienartikel (Bücher, Videospiele, DVDs, CDs, Blu-rays, etc.).
 
@@ -217,7 +202,23 @@ WICHTIG: Gib NUR das JSON Array zurück, keine zusätzlichen Erklärungen oder M
             "data": image_bytes
         }
         
-        response = model.generate_content([prompt, image_data])
+        # Versuche verschiedene Modelle, bis eines funktioniert
+        response = None
+        last_error = None
+        
+        for model_name in model_names:
+            try:
+                model = genai.GenerativeModel(model_name)
+                response = model.generate_content([prompt, image_data])
+                break  # Erfolg, beende Schleife
+            except Exception as e:
+                last_error = str(e)
+                continue
+        
+        if response is None:
+            st.error(f"❌ Kein verfügbares Gemini-Modell gefunden. Letzter Fehler: {last_error}")
+            st.info("💡 Versuche: gemini-1.5-pro, gemini-pro oder gemini-1.5-flash")
+            return []
         
         # Extrahiere JSON aus der Antwort
         response_text = response.text.strip()
