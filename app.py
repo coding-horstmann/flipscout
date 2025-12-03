@@ -636,27 +636,32 @@ if image_to_process:
                             median_offer = r.get("Median Angebotspreis (inkl. Versand)", "N/A")
                             min_offer = r.get("Günstigster Angebotspreis (inkl. Versand)", "N/A")
                             
+                            # Erstelle klickbaren Link falls vorhanden
+                            link_text = ""
+                            if r.get("Link") and r["Link"] != "":
+                                link_text = f" | [🔗 eBay Listing ansehen]({r['Link']})"
+                            
                             # Profit-Bewertung basierend auf Median Angebotspreis (inkl. Versand)
                             if r["Preis"] > 20:
                                 st.success(
                                     f"✅ **{r['Artikel']}** | "
                                     f"Günstigster: {min_offer} | "
                                     f"Median: {median_offer} | "
-                                    f"Potentieller Profit: {r['Preis']:.2f}€+ 💚"
+                                    f"Potentieller Profit: {r['Preis']:.2f}€+ 💚{link_text}"
                                 )
                             elif r["Preis"] > 10:
                                 st.info(
                                     f"ℹ️ **{r['Artikel']}** | "
                                     f"Günstigster: {min_offer} | "
                                     f"Median: {median_offer} | "
-                                    f"Möglicher Profit: {r['Preis']:.2f}€"
+                                    f"Möglicher Profit: {r['Preis']:.2f}€{link_text}"
                                 )
                             else:
                                 st.warning(
                                     f"⚠️ **{r['Artikel']}** | "
                                     f"Günstigster: {min_offer} | "
                                     f"Median: {median_offer} | "
-                                    f"Niedrige Margen"
+                                    f"Niedrige Margen{link_text}"
                                 )
                     
                     # Zeige Artikel ohne Ergebnisse
