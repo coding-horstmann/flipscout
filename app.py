@@ -181,7 +181,13 @@ def analyze_image_with_gemini(image_bytes: bytes) -> List[Dict]:
         genai.configure(api_key=api_key)
         
         # Versuche verschiedene Modellnamen (Fallback-Mechanismus)
-        model_names = ['gemini-1.5-pro', 'gemini-pro', 'gemini-1.5-flash']
+        # Reihenfolge: Neueste zuerst, dann Fallbacks
+        model_names = [
+            'gemini-pro',           # Stabilstes Modell
+            'gemini-1.5-pro',       # Neueres Modell
+            'models/gemini-pro',    # Mit models/ Präfix
+            'models/gemini-1.5-pro' # Mit models/ Präfix
+        ]
         
         prompt = """Analysiere das Bild. Identifiziere alle Medienartikel (Bücher, Videospiele, DVDs, CDs, Blu-rays, etc.).
 
@@ -205,19 +211,28 @@ WICHTIG: Gib NUR das JSON Array zurück, keine zusätzlichen Erklärungen oder M
         # Versuche verschiedene Modelle, bis eines funktioniert
         response = None
         last_error = None
+        successful_model = None
         
         for model_name in model_names:
             try:
                 model = genai.GenerativeModel(model_name)
                 response = model.generate_content([prompt, image_data])
+                successful_model = model_name
                 break  # Erfolg, beende Schleife
             except Exception as e:
                 last_error = str(e)
                 continue
         
         if response is None:
-            st.error(f"❌ Kein verfügbares Gemini-Modell gefunden. Letzter Fehler: {last_error}")
-            st.info("💡 Versuche: gemini-1.5-pro, gemini-pro oder gemini-1.5-flash")
+            # Versuche verfügbare Modelle zu listen (für Debugging)
+            try:
+                available_models = [m.name for m in genai.list_models() 
+                                  if 'generateContent' in m.supported_generation_methods]
+                st.error(f"❌ Kein verfügbares Gemini-Modell gefunden. Letzter Fehler: {last_error}")
+                st.info(f"💡 Verfügbare Modelle: {', '.join(available_models[:5])}")
+            except:
+                st.error(f"❌ Kein verfügbares Gemini-Modell gefunden. Letzter Fehler: {last_error}")
+                st.info("💡 Bitte überprüfe deinen GOOGLE_API_KEY und die Modellverfügbarkeit.")
             return []
         
         # Extrahiere JSON aus der Antwort
